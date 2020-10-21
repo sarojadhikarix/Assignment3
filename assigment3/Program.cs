@@ -30,11 +30,14 @@ namespace assigment3
 
     public class Category
     {
+        
         [JsonPropertyName("cid")]
-        public int Id { get; set; }
+        public int cid { get; set; }
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string name { get; set; }
+
     }
+
 
     public static class Util
     {
@@ -53,6 +56,7 @@ namespace assigment3
     {
         static void Main(string[] args)
         {
+            List<Category> categories = new List<Category>();
             var server = new TcpListener(IPAddress.Loopback, 5000);
             server.Start();
             Console.WriteLine("Server started!");
@@ -60,12 +64,7 @@ namespace assigment3
             while (true)
             {
                 //Creating categories
-                var categories = new List<object>
-                {
-                    new {cid = 1, name = "Beverages"},
-                    new {cid = 2, name = "Condiments"},
-                    new {cid = 3, name = "Confections"}
-                };
+                
 
                 var client = server.AcceptTcpClient();
                 Console.WriteLine("Accepted client!");
@@ -78,8 +77,6 @@ namespace assigment3
                 var msg = Read(client, stream);
 
                 var request = JsonSerializer.Deserialize<Request>(msg);
-                var pathID = request.path.Substring(16);
-
 
                 string validation = CheckRequest(request);
 
@@ -95,23 +92,29 @@ namespace assigment3
                     stream.Write(Encoding.UTF8.GetBytes(responseJson));
                 }
 
-                if (request.method.Equals("read") && request.path.Equals("/api/categories"))
+                if (request.path != null)
                 {
-                    Response response = new Response();
-                    response.Status = "1 Ok";
-                    response.Body = categories.ToJson();
+                    if (request.method.Equals("read") && request.path.Equals("/api/categories"))
+                    {
+                        Response response = new Response();
+                        response.Status = "1 Ok";
+                        response.Body = categories.ToJson();
 
-                    var responseJson = JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-                    stream.Write(Encoding.UTF8.GetBytes(responseJson));
+                        var responseJson = JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                        stream.Write(Encoding.UTF8.GetBytes(responseJson));
+                    }
                 }
 
                 //regex for category with valid id
-                Regex rxID = new Regex("^/api/categories/\\d$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                if (request.path != null) { 
+
+                    Regex rxID = new Regex("^/api/categories/\\d$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
                 if (request.method.Equals("read") && rxID.IsMatch(request.path))
                 {
                     Response response = new Response();
                     response.Status = "1 Ok";
-                    response.Body = categories[(Int32.Parse(request.path.Substring(16))) - 1].ToJson();
+                    Console.WriteLine(categories.Find(c => c.cid == (Int32.Parse(request.path.Substring(16)))).name);
+                    response.Body = categories.Find(c => c.cid == (Int32.Parse(request.path.Substring(16)))).ToJson();
                     response.Body = response.Body.Replace("[", "").Replace("]", "");
 
 
@@ -119,20 +122,32 @@ namespace assigment3
                     var responseJson = JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                     stream.Write(Encoding.UTF8.GetBytes(responseJson));
                 }
+            }
 
-                if (request.method.Equals("update") && rxID.IsMatch(request.path))
+                
+                if(request.path != null)
                 {
+                    Regex rxID = new Regex("^/api/categories/\\d$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                    if (request.method.Equals("update") && rxID.IsMatch(request.path))
+                {
+                        Console.WriteLine(request.body);
+                        var requestBody = JsonSerializer.Deserialize<Category>(request.body);
+                        //categories.Find(c => c.Id == (Int32.Parse(request.path.Substring(16))));
+                        var item = categories.Find(c => c.cid == int.Parse(request.path.Substring(16)));
+                        categories.Remove(item);
 
-                    categories[int.Parse(request.path.Substring(16)) - 1] = request.body;
+                        categories.Add(requestBody);
+
 
                     Response response = new Response();
                     response.Status = "3 updated";
 
-
-
                     var responseJson = JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                     stream.Write(Encoding.UTF8.GetBytes(responseJson));
                 }
+                }
+
+                
 
 
                 if (validation != "valid")
@@ -162,29 +177,39 @@ namespace assigment3
         {
             var result = "valid";
 
+            Regex rx = new Regex("^\\d+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            if (!request.method.Equals("echo") && request.path == null && request.body == null && rx.IsMatch(request.date))
+            {
+                result = "missing resource";
+            }
+
             //with id not for create method
             Regex rxID = new Regex("^/api/categories/\\d$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-            if (request.method.Equals("read") || request.method.Equals("update") || request.method.Equals("delete") && !rxID.IsMatch(request.path))
+            if (request.path != null)
             {
-                var id = request.path.Substring(16);
-
-                if (id.Length > 1)
+                if (request.method.Equals("read") || request.method.Equals("update") || request.method.Equals("delete") && !rxID.IsMatch(request.path))
                 {
-                    result = "5 not found";
-                }
-                else
-                {
+                    var id = request.path.Substring(16);
 
-                    result = "4 Bad Request";
+                    if (id.Length > 1)
+                    {
+                        result = "5 not found";
+                    }
+                    else
+                    {
+
+                        result = "4 Bad Request";
+                    }
                 }
             }
 
             //without id for create method
-            Regex rxCreate = new Regex("^/api/categories/$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-            if (request.method.Equals("create") && !rxCreate.IsMatch(request.path))
-            {
-                result = "4 Bad Request";
+            if (request.path != null) { 
+                Regex rxCreate = new Regex("^/api/categories/$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                if (request.method.Equals("create") && !rxCreate.IsMatch(request.path))
+                {
+                    result = "4 Bad Request";
+                }
             }
 
 
@@ -207,6 +232,7 @@ namespace assigment3
                 }
 
             }
+
 
             if (request.body != null && request.method == "update" && request.path == "/api/categories/1" && request.body == "Hello World")
             {
